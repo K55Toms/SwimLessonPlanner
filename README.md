@@ -57,20 +57,15 @@ A plan can't be saved without the pre-water-entry safety question and talking po
 | Layer | Choice |
 |---|---|
 | Front end and API | [Next.js](https://nextjs.org/) |
-| Database | Oracle Cloud Infrastructure (OCI) **Autonomous Database (ADB)** |
+| Database | Oracle Cloud Infrastructure (OCI) **Autonomous Database (ADB)**, schema `SWIMLESSONPLANNER` |
 | AI suggestions | Anthropic Claude API |
 | PDF generation | TBD |
 | Authentication | TBD |
 | Hosting | TBD (OCI is the likely option) |
 
-## Data model (draft)
+## Data model
 
-- **teachers**: account and profile
-- **outcomes**: stage-linked outcome descriptions, written in the app's own words
-- **activities**: reusable activity library, tagged by stage, outcome and lesson section
-- **lesson_plans**: a plan with its stage, targeted outcomes, sections, safety question and talking point
-- **lesson_deliveries**: when a plan was used, by whom, and optional notes and whether they were shared
-- **term_blocks**: an ordered set of plans and deliveries for a group across a term
+The data lives in a dedicated `SWIMLESSONPLANNER` schema on OCI Autonomous Database. See [docs/database-schema.md](docs/database-schema.md) for the full design and ER diagram, and [`db/`](db) for the create and cleanup scripts.
 
 ## Roadmap
 
