@@ -3,7 +3,7 @@
 -- Run as: SWIMLESSONPLANNER
 -- Usage:  @db/01_create_objects.sql
 -- Re-run: run db/90_drop_objects.sql first.
--- Compatible with Oracle 19c and 23ai (no 23ai-only syntax used).
+-- Target: Autonomous Database 23ai / 26ai.
 -- =============================================================================
 whenever sqlerror exit failure rollback
 

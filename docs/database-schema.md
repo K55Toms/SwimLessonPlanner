@@ -9,7 +9,8 @@ SwimLessonPlanner stores its data in a dedicated schema, **`SWIMLESSONPLANNER`**
 - **Outcomes in our own words.** `OUTCOMES` holds outcome descriptions written for this app. They are aligned with the Swim England Learn to Swim stages, not copied from them.
 - **The library grows from use.** AI-generated and teacher-written activities and plans are stored together. `SOURCE` records where each one came from, and `AI_GENERATIONS` keeps an audit of what Claude was asked and what it returned.
 - **Sharing is opt-in.** Plans are `PRIVATE` until a teacher shares them. Delivery notes are only shared when the teacher sets `NOTES_SHARED = 'Y'`.
-- **Portable SQL.** The scripts avoid 23ai-only syntax, so they run on both 19c and 23ai ADB.
+- **Least privilege.** The web app connects as `SLP_APP`, which can read and write rows but can't create, change or drop tables. Only the schema owner can change structure.
+- **Target version: ADB 23ai / 26ai.** `02_create_app_user.sql` uses schema-level privileges (`GRANT ... ANY TABLE ON SCHEMA`), which need 23ai or later.
 
 ## Entity relationship diagram
 
@@ -110,6 +111,26 @@ A section either points at a library activity (`ACTIVITY_ID`) or holds its own `
 - Every foreign key column has an index, unless it already leads a primary key or unique constraint.
 - Deleting a plan cascades to its sections and outcome links. A plan that has been delivered can't be deleted, so archive it instead (`STATUS = 'ARCHIVED'`).
 
+## Database users
+
+| Account | Type | Used by | Can do |
+|---|---|---|---|
+| `SWIMLESSONPLANNER` | Schema owner | You, when deploying or migrating the schema | Create, alter and drop objects in its own schema |
+| `SLP_APP` | Application login | The Next.js app | `SELECT`, `INSERT`, `UPDATE` and `DELETE` on every table in `SWIMLESSONPLANNER`, through the role `SLP_APP_ROLE`. No DDL. |
+
+`SLP_APP_ROLE` is granted with schema-level privileges, so tables added later are covered automatically.
+
+The app has to point its sessions at the schema, because `SLP_APP` owns no tables. It can either:
+- run `alter session set current_schema = swimlessonplanner` when it opens a connection, or
+- qualify every table name, for example `swimlessonplanner.lesson_plans`.
+
+**Recommended:** lock the owner account between deployments, and unlock it only when you need to change the schema:
+
+```sql
+alter user swimlessonplanner account lock;    -- after deploying
+alter user swimlessonplanner account unlock;  -- before a migration
+```
+
 ## Scripts
 
 All scripts are in [`db/`](../db). Run them with SQLcl or SQL*Plus using the ADB wallet. They use `ACCEPT` prompts, which may not work in the Database Actions web SQL worksheet.
@@ -118,8 +139,9 @@ All scripts are in [`db/`](../db). Run them with SQLcl or SQL*Plus using the ADB
 |---|---|---|
 | `00_create_schema_user.sql` | `ADMIN` | Prompts for a password, then creates the `SWIMLESSONPLANNER` user with quota on `DATA` and object-creation privileges |
 | `01_create_objects.sql` | `SWIMLESSONPLANNER` | Creates all tables and indexes, and seeds Stages 1–7 |
+| `02_create_app_user.sql` | `ADMIN` | Prompts for a password, then creates the role `SLP_APP_ROLE` and the login `SLP_APP` |
 | `90_drop_objects.sql` | `SWIMLESSONPLANNER` | Drops all tables and data but keeps the user. Asks you to type `DROP`. Safe to re-run. |
-| `99_drop_schema_user.sql` | `ADMIN` | Drops the user and everything it owns. Asks you to type `DROP SWIMLESSONPLANNER`. Irreversible. |
+| `99_drop_schema_user.sql` | `ADMIN` | Drops `SLP_APP`, `SLP_APP_ROLE` and `SWIMLESSONPLANNER` with everything it owns. Asks you to type `DROP SWIMLESSONPLANNER`. Irreversible. Safe to re-run. |
 
 ### Example (SQLcl)
 
@@ -129,6 +151,9 @@ SQL> @db/00_create_schema_user.sql
 
 sql -cloudconfig Wallet_<db>.zip swimlessonplanner@<db>_high
 SQL> @db/01_create_objects.sql
+
+sql -cloudconfig Wallet_<db>.zip admin@<db>_high
+SQL> @db/02_create_app_user.sql
 ```
 
 ### Reset during development
@@ -136,10 +161,12 @@ SQL> @db/01_create_objects.sql
 ```sh
 SQL> @db/90_drop_objects.sql
 SQL> @db/01_create_objects.sql
+
+sql -cloudconfig Wallet_<db>.zip admin@<db>_high
+SQL> @db/02_create_app_user.sql
 ```
 
 ## Open questions
 
-- **Separate application user.** At the moment the app would connect as the schema owner. A least-privilege `SLP_APP` user with only `SELECT/INSERT/UPDATE/DELETE` grants would be safer for production.
 - **Authentication provider.** This decides what goes in `TEACHERS.AUTH_SUBJECT`.
 - **Outcome content.** Who writes the outcome descriptions for each stage, and when do they get loaded?
